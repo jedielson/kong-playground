@@ -8,17 +8,14 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { LocationInterceptor } from '../../../core/http/location.interceptor';
 import { BookService } from './book.service';
 import { CreateBookRequest } from './dto/create-book.dto';
 import { GetBooksRequest } from './dto/get-books.dto';
 import { UpdateBookRequest } from './dto/update-book.dto';
 
-@UseGuards(AuthGuard('jwt'))
 @Controller('book')
 export class BookController {
   constructor(private bookService: BookService) {}

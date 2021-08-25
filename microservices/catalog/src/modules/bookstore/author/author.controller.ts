@@ -5,16 +5,13 @@ import {
   Param,
   Post,
   Query,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { LocationInterceptor } from '../../../core/http/location.interceptor';
 import { AuthorService } from './author.service';
 import { CreateAuthorRequest } from './dto/create-authors.dto';
 import { GetAuthorsRequest } from './dto/get-authors.dto';
 
-@UseGuards(AuthGuard('jwt'))
 @Controller('author')
 export class AuthorController {
   constructor(private authService: AuthorService) {}
