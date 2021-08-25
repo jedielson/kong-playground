@@ -12,6 +12,22 @@ COPY . .
 
 RUN yarn build
 
+FROM node:16.5.0-alpine3.11 as migrations
+
+WORKDIR /app
+
+COPY package.json .
+
+RUN yarn install
+
+COPY . .
+
+RUN yarn build
+
+USER node
+
+CMD sleep 5 && yarn db migration:run
+
 FROM node:16.5.0-alpine3.11 as production
 
 ARG NODE_ENV=production

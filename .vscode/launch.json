@@ -4,9 +4,9 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug Nest Framework",
+            "name": "Debug Catalog",
             "args": [
-                "${workspaceFolder}/src/main.ts"
+                "${workspaceFolder}/microservices/catalog/src/main.ts"
             ],            
             "runtimeArgs": [
                 "--nolazy",
@@ -16,8 +16,8 @@
                 "tsconfig-paths/register"
             ],
             "sourceMaps": true,
-            "envFile": "${workspaceFolder}/.env",
-            "cwd": "${workspaceRoot}",
+            "envFile": "${workspaceFolder}/microservices/catalog/.env",
+            "cwd": "${workspaceRoot}/microservices/catalog",
             "console": "integratedTerminal"
         }
     ]
