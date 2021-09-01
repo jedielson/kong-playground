@@ -24,7 +24,7 @@ services:
     mem_limit: 128mb
     
   database:
-    image: postgres:alpine
+    image: postgres:9.6
     container_name: postgres-MS
     restart: on-failure
     ports: 
@@ -32,7 +32,7 @@ services:
     environment: 
         POSTGRES_USER: pguser
         POSTGRES_PASSWORD: postgres
-        POSTGRES_MULTIPLE_DATABASES: catalog,store
+        POSTGRES_MULTIPLE_DATABASES: catalog,store,kong,konga
     volumes: 
         - ./deployments/local/pg:/docker-entrypoint-initdb.d
     env_file: 
@@ -40,6 +40,76 @@ services:
     networks: 
         - jedinetwork
     mem_limit: 1gb
+
+  kong-migrations:
+    image: kong:latest
+    entrypoint: sh -c "sleep 10 && kong migrations bootstrap -v"
+    environment:
+        KONG_DATABASE: postgres
+        KONG_PG_HOST: database
+        KONG_PG_DATABASE: kong
+        KONG_PG_USER: pguser
+        KONG_PG_PASSWORD: postgres
+    depends_on:
+        - database
+    networks:
+        - jedinetwork
+    restart: on-failure
+
+  kong:
+    image: kong:latest
+    environment:
+        KONG_DATABASE: postgres
+        KONG_PG_HOST: database
+        KONG_PG_DATABASE: kong
+        KONG_PG_USER: pguser
+        KONG_PG_PASSWORD: postgres
+        KONG_PROXY_ACCESS_LOG: /dev/stdout
+        KONG_ADMIN_ACCESS_LOG: /dev/stdout
+        KONG_PROXY_ERROR_LOG: /dev/stderr
+        KONG_ADMIN_ERROR_LOG: /dev/stderr
+        KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+    restart: on-failure
+    depends_on:
+        - kong-migrations
+    ports:
+        - 8002:8000
+        - 8443:8443
+        - 8001:8001
+        - 8444:8444
+    networks:
+        - jedinetwork
+
+  konga-migrations:
+    image: pantsel/konga
+    command: "-c prepare -a postgres -u postgresql://pguser:postgres@database:5432/konga"    
+    restart: on-failure
+    links:
+      - database
+    depends_on:
+      - database
+    networks:
+      - jedinetwork
+
+  konga:
+    image: pantsel/konga
+    environment:
+        TOKEN_SECRET: ronaldo
+        DB_ADAPTER: postgres
+        DB_HOST: database
+        DB_PORT: 5432
+        DB_DATABASE: konga
+        DB_USER: pguser
+        DB_PASSWORD: postgres
+        NODE_ENV: development
+        KONGA_HOOK_TIMEOUT: 10000
+    restart: on-failure
+    ports:
+        - 1337:1337
+    depends_on:
+        - konga-migrations
+    networks:
+        - jedinetwork
 
   catalog_migration:
     build:
@@ -68,7 +138,6 @@ services:
     mem_limit: 1gb
     depends_on: 
         - database
-
   # catalog:
   #   build:
   #     context: .
