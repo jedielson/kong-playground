@@ -1,0 +1,201 @@
+version: "3"
+services:  
+  database:
+    image: postgres:9.6
+    container_name: postgres-MS
+    restart: on-failure
+    ports: 
+        - "5432:5432"
+    environment: 
+        POSTGRES_USER: pguser
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_MULTIPLE_DATABASES: catalog,store,kong,konga
+    volumes: 
+        - ./deployments/local/pg:/docker-entrypoint-initdb.d
+    env_file: 
+        - "./.env"
+    networks: 
+        - msnetwork
+    mem_limit: 1gb
+
+  kong-migrations:
+    image: kong:latest
+    entrypoint: sh -c "sleep 10 && kong migrations bootstrap -v"
+    environment:
+        KONG_DATABASE: postgres
+        KONG_PG_HOST: database
+        KONG_PG_DATABASE: kong
+        KONG_PG_USER: pguser
+        KONG_PG_PASSWORD: postgres
+    depends_on:
+        - database
+    networks:
+        - msnetwork
+    restart: on-failure
+
+  kong:
+    image: kong:latest
+    environment:
+        KONG_DATABASE: postgres
+        KONG_PG_HOST: database
+        KONG_PG_DATABASE: kong
+        KONG_PG_USER: pguser
+        KONG_PG_PASSWORD: postgres
+        KONG_PROXY_ACCESS_LOG: /dev/stdout
+        KONG_ADMIN_ACCESS_LOG: /dev/stdout
+        KONG_PROXY_ERROR_LOG: /dev/stderr
+        KONG_ADMIN_ERROR_LOG: /dev/stderr
+        KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+    restart: on-failure
+    depends_on:
+        - kong-migrations
+    ports:
+        - 8002:8000
+        - 8443:8443
+        - 8001:8001
+        - 8444:8444
+    networks:
+        - msnetwork
+
+  konga-migrations:
+    image: pantsel/konga
+    command: "-c prepare -a postgres -u postgresql://pguser:postgres@database:5432/konga"    
+    restart: on-failure
+    links:
+      - database
+    depends_on:
+      - database
+    networks:
+      - msnetwork
+
+  konga:
+    image: pantsel/konga
+    environment:
+        TOKEN_SECRET: ronaldo
+        DB_ADAPTER: postgres
+        DB_HOST: database
+        DB_PORT: 5432
+        DB_DATABASE: konga
+        DB_USER: pguser
+        DB_PASSWORD: postgres
+        NODE_ENV: development
+        KONGA_HOOK_TIMEOUT: 10000
+    restart: on-failure
+    ports:
+        - 1337:1337
+    depends_on:
+        - konga-migrations
+    networks:
+        - msnetwork
+
+  catalog_migration:
+    build:
+        context: microservices/catalog
+        target: migrations
+    container_name: catalog_migration
+    restart: on-failure
+    environment: 
+        TYPEORM_HOST: database
+        TYPEORM_PORT: 5432
+        TYPEORM_USERNAME: pguser 
+        TYPEORM_PASSWORD: postgres
+        TYPEORM_CONNECTION: postgres
+        TYPEORM_DATABASE: catalog 
+        TYPEORM_SYNCHRONIZE: false
+        TYPEORM_LOGGING: true
+        TYPEORM_ENTITIES: ./src/**/*.entity.ts
+        TYPEORM_LOGGING: "all"
+        TYPEORM_MIGRATIONS: ./dist/migrations/*.js
+        TYPEORM_MIGRATIONS_DIR: ./src/migrations
+        POSTGRES_USER: pguser
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_MULTIPLE_DATABASES: catalog,store
+    networks: 
+        - msnetwork
+    mem_limit: 1gb
+    depends_on: 
+        - database
+
+  catalog:
+    build:
+        context: microservices/catalog
+        target: production
+    ports:
+        - 3000:3000
+    environment:
+        TYPEORM_HOST: database
+        TYPEORM_PORT: 5432
+        TYPEORM_USERNAME: pguser 
+        TYPEORM_PASSWORD: postgres
+        TYPEORM_CONNECTION: postgres
+        TYPEORM_DATABASE: catalog 
+        TYPEORM_SYNCHRONIZE: false
+        TYPEORM_LOGGING: true
+        TYPEORM_ENTITIES: ./src/**/*.entity.ts
+        TYPEORM_LOGGING: "all"
+        TYPEORM_MIGRATIONS: ./dist/migrations/*.js
+        TYPEORM_MIGRATIONS_DIR: ./src/migrations
+        JWTKEY: random_secret_key
+        TOKEN_EXPIRATION: 48h
+        BEARER: Bearer
+    networks: 
+        - msnetwork
+    depends_on: 
+        - database
+        - catalog_migration
+    
+  # pgadmin:
+  #   depends_on: 
+  #       - database
+  #   image: dpage/pgadmin4
+  #   container_name: "pgadmin-MS"
+  #   environment:
+  #       # HOST: host.docker.internal
+  #       PGADMIN_DEFAULT_EMAIL: "admin@admin.com"
+  #       PGADMIN_DEFAULT_PASSWORD: "postgres"
+  #   ports: 
+  #       - "8001:80"
+  #   networks: 
+  #       - msnetwork
+  #   volumes: 
+  #       - ./deployments/local/pg-admin/servers/servers.json:/pgadmin4/servers.json
+  #       - ./deployments/local/pg-admin/lib:/var/lib/pgadmin
+  #   labels:
+  #       - "traefik.enable=true"
+  #       # - "traefik.tcp.routers.pgadmin.rule=Host(`pgadmin.localhost`)"
+  #       # - "traefik.tcp.services.pgadmin.loadbalancer.server.port=8001"
+  #       - "traefik.http.routers.pgadmin.entrypoints=web"
+  #       - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.localhost`)"
+  #       - "traefik.http.services.pgadmin.loadbalancer.server.port=8001"
+  #   mem_limit: 128mb
+
+#   node-exporter:
+#     image: prom/node-exporter:latest
+#     container_name: node-exporter
+#     restart: on-failure
+#     ports:
+#       - "9100:9100"
+#     networks:
+#       - msnetwork
+#     mem_limit: 128mb
+
+#   cadvisor:
+#     image: gcr.io/google-containers/cadvisor:latest
+#     container_name: cadvisor
+#     restart: on-failure
+#     ports:
+#       - "9080:8080"
+#     networks:
+#       - msnetwork
+#     volumes:
+#       - /:/rootfs:ro
+#       - /var/run:/var/run:rw
+#       - /sys:/sys:ro
+#       - /var/lib/docker/:/var/lib/docker:ro
+#     depends_on:
+#       - "redis"
+#     mem_limit: 128mb  
+
+networks:
+    msnetwork:
+        driver: bridge
