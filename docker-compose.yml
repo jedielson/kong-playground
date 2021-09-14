@@ -1,28 +1,5 @@
 version: "3"
-services:
-  traefik:
-    image: "traefik:v2.3"
-    container_name: "traefik-MS"
-    command:
-        - "--global.sendAnonymousUsage=false"
-        #- "--log.level=DEBUG"
-        - "--api.insecure=true"
-        - "--providers.docker=true"
-        - "--providers.docker.exposedbydefault=false"
-        - "--entrypoints.web.address=:80"
-    ports:
-        - "80:80"
-        - "8080:8080"
-    volumes:
-        - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    networks:
-        - jedinetwork
-    labels:
-        - "traefik.enable=true"
-        - "traefik.http.services.traefik.loadbalancer.server.port=8080"
-        - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
-    mem_limit: 128mb
-    
+services:  
   database:
     image: postgres:9.6
     container_name: postgres-MS
@@ -38,7 +15,7 @@ services:
     env_file: 
         - "./.env"
     networks: 
-        - jedinetwork
+        - msnetwork
     mem_limit: 1gb
 
   kong-migrations:
@@ -53,7 +30,7 @@ services:
     depends_on:
         - database
     networks:
-        - jedinetwork
+        - msnetwork
     restart: on-failure
 
   kong:
@@ -78,7 +55,7 @@ services:
         - 8001:8001
         - 8444:8444
     networks:
-        - jedinetwork
+        - msnetwork
 
   konga-migrations:
     image: pantsel/konga
@@ -89,7 +66,7 @@ services:
     depends_on:
       - database
     networks:
-      - jedinetwork
+      - msnetwork
 
   konga:
     image: pantsel/konga
@@ -109,7 +86,7 @@ services:
     depends_on:
         - konga-migrations
     networks:
-        - jedinetwork
+        - msnetwork
 
   catalog_migration:
     build:
@@ -134,33 +111,38 @@ services:
         POSTGRES_PASSWORD: postgres
         POSTGRES_MULTIPLE_DATABASES: catalog,store
     networks: 
-        - jedinetwork
+        - msnetwork
     mem_limit: 1gb
     depends_on: 
         - database
-  # catalog:
-  #   build:
-  #     context: .
-  #     dockerfile: /microservices/catalog/deployments/Dockerfile
-  #     target: development
-  #   ports:
-  #     - 3000:3000
-  #   environment:
-  #     TYPEORM_HOST = localhost
-  #     TYPEORM_PORT = 8080
-  #     TYPEORM_USERNAME = pguser 
-  #     TYPEORM_PASSWORD = postgres
-  #     TYPEORM_CONNECTION = postgres
-  #     TYPEORM_DATABASE = catalog 
-  #     TYPEORM_SYNCHRONIZE = false
-  #     TYPEORM_LOGGING = true
-  #     TYPEORM_ENTITIES = ./src/**/*.entity.ts
-  #     TYPEORM_LOGGING = "all"
-  #     TYPEORM_MIGRATIONS = ./dist/migrations/*.js
-  #     TYPEORM_MIGRATIONS_DIR = ./src/migrations
-  #     JWTKEY=random_secret_key
-  #     TOKEN_EXPIRATION=48h
-  #     BEARER=Bearer
+
+  catalog:
+    build:
+        context: microservices/catalog
+        target: production
+    ports:
+        - 3000:3000
+    environment:
+        TYPEORM_HOST: database
+        TYPEORM_PORT: 5432
+        TYPEORM_USERNAME: pguser 
+        TYPEORM_PASSWORD: postgres
+        TYPEORM_CONNECTION: postgres
+        TYPEORM_DATABASE: catalog 
+        TYPEORM_SYNCHRONIZE: false
+        TYPEORM_LOGGING: true
+        TYPEORM_ENTITIES: ./src/**/*.entity.ts
+        TYPEORM_LOGGING: "all"
+        TYPEORM_MIGRATIONS: ./dist/migrations/*.js
+        TYPEORM_MIGRATIONS_DIR: ./src/migrations
+        JWTKEY: random_secret_key
+        TOKEN_EXPIRATION: 48h
+        BEARER: Bearer
+    networks: 
+        - msnetwork
+    depends_on: 
+        - database
+        - catalog_migration
     
   # pgadmin:
   #   depends_on: 
@@ -174,7 +156,7 @@ services:
   #   ports: 
   #       - "8001:80"
   #   networks: 
-  #       - jedinetwork
+  #       - msnetwork
   #   volumes: 
   #       - ./deployments/local/pg-admin/servers/servers.json:/pgadmin4/servers.json
   #       - ./deployments/local/pg-admin/lib:/var/lib/pgadmin
@@ -194,7 +176,7 @@ services:
 #     ports:
 #       - "9100:9100"
 #     networks:
-#       - jedinetwork
+#       - msnetwork
 #     mem_limit: 128mb
 
 #   cadvisor:
@@ -204,7 +186,7 @@ services:
 #     ports:
 #       - "9080:8080"
 #     networks:
-#       - jedinetwork
+#       - msnetwork
 #     volumes:
 #       - /:/rootfs:ro
 #       - /var/run:/var/run:rw
@@ -215,5 +197,5 @@ services:
 #     mem_limit: 128mb  
 
 networks:
-    jedinetwork:
+    msnetwork:
         driver: bridge
